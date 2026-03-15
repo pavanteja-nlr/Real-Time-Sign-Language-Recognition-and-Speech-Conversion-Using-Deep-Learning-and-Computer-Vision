@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hand-to-Speak Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.min.js"></script>
+  </head>
+  <body class="bg-zinc-950 text-zinc-100">
+    <div class="min-h-screen">
+      <header class="border-b border-zinc-800">
+        <div class="mx-auto max-w-7xl px-6 py-4 flex items-center justify-between">
+          <div>
+            <div class="text-lg font-semibold tracking-tight">Hand-to-Speak</div>
+            <div class="text-xs text-zinc-400">Real-time ASL demo dashboard</div>
+          </div>
+          <div class="flex items-center gap-3">
+            <span id="serverBadge" class="text-xs rounded-full px-3 py-1 bg-zinc-800 text-zinc-200">Server: connecting…</span>
+            <button id="btnExport" class="text-xs rounded-md px-3 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700">
+              Export .txt
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main class="mx-auto max-w-7xl px-6 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <section class="lg:col-span-8">
+          <div class="rounded-xl border border-zinc-800 bg-zinc-900/40 overflow-hidden">
+            <div class="px-4 py-3 border-b border-zinc-800 flex items-center justify-between">
+              <div class="text-sm font-medium">Live Camera</div>
+              <div class="flex items-center gap-2">
+                <button id="btnCamera" class="text-xs rounded-md px-3 py-2 bg-indigo-600 hover:bg-indigo-500">
+                  Start camera
+                </button>
+                <label class="text-xs text-zinc-300 flex items-center gap-2 select-none">
+                  <input id="chkOverlay" type="checkbox" checked class="accent-indigo-500" />
+                  Show landmarks
+                </label>
+              </div>
+            </div>
+
+            <div class="relative aspect-video bg-black">
+              <video
+                id="video"
+                class="absolute inset-0 w-full h-full object-cover transform -scale-x-100"
+                playsinline
+                muted
+              ></video>
+              <canvas id="overlay" class="absolute inset-0 w-full h-full pointer-events-none"></canvas>
+
+              <div class="absolute left-4 bottom-4 right-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div class="rounded-lg bg-zinc-950/60 border border-zinc-800 backdrop-blur px-4 py-3">
+                  <div class="text-xs text-zinc-400">Translated Text</div>
+                  <div id="txtWord" class="text-3xl font-semibold tracking-wide mt-1">…</div>
+                </div>
+                <div class="rounded-lg bg-zinc-950/60 border border-zinc-800 backdrop-blur px-4 py-3">
+                  <div class="flex items-center justify-between">
+                    <div class="text-xs text-zinc-400">Confidence</div>
+                    <div id="txtConf" class="text-xs text-zinc-300 tabular-nums">0%</div>
+                  </div>
+                  <div class="mt-2 h-2 rounded-full bg-zinc-800 overflow-hidden">
+                    <div id="barConf" class="h-2 bg-emerald-500 w-0"></div>
+                  </div>
+                  <div id="txtHint" class="text-[11px] text-zinc-400 mt-2">Waiting for landmarks…</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <aside class="lg:col-span-4 space-y-6">
+          <div class="rounded-xl border border-zinc-800 bg-zinc-900/40 overflow-hidden">
+            <div class="px-4 py-3 border-b border-zinc-800">
+              <div class="text-sm font-medium">Speech & Settings</div>
+              <div class="text-xs text-zinc-400">Browser speech is used for the demo</div>
+            </div>
+            <div class="p-4 space-y-4">
+              <div>
+                <div class="text-xs text-zinc-400 mb-2">Voice</div>
+                <select id="selVoice" class="w-full bg-zinc-950 border border-zinc-800 rounded-md px-3 py-2 text-sm">
+                  <option value="">Loading voices…</option>
+                </select>
+              </div>
+
+              <div>
+                <div class="flex items-center justify-between">
+                  <div class="text-xs text-zinc-400">Confidence threshold</div>
+                  <div id="txtThreshold" class="text-xs text-zinc-300 tabular-nums">0.85</div>
+                </div>
+                <input id="rngThreshold" type="range" min="0.5" max="0.99" step="0.01" value="0.85" class="w-full mt-2 accent-indigo-500" />
+                <div class="text-[11px] text-zinc-500 mt-1">Higher means fewer but more certain detections.</div>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <button id="btnSpeak" class="text-xs rounded-md px-3 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700">
+                  Speak current word
+                </button>
+                <label class="text-xs text-zinc-300 flex items-center gap-2 select-none">
+                  <input id="chkAutoSpeak" type="checkbox" checked class="accent-indigo-500" />
+                  Auto-speak stable words
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="rounded-xl border border-zinc-800 bg-zinc-900/40 overflow-hidden">
+            <div class="px-4 py-3 border-b border-zinc-800 flex items-center justify-between">
+              <div>
+                <div class="text-sm font-medium">Session history</div>
+                <div class="text-xs text-zinc-400">Last 10 stable detections</div>
+              </div>
+              <button id="btnClear" class="text-xs rounded-md px-3 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700">Clear</button>
+            </div>
+            <div class="p-4">
+              <ol id="history" class="space-y-2"></ol>
+            </div>
+          </div>
+        </aside>
+      </main>
+    </div>
+
+    <script type="module" src="/main.js"></script>
+  </body>
+</html>
